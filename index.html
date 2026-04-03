@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>주사위 예측기</title>
+<style>
+body{font-family:-apple-system;text-align:center;padding:40px;background:#111;color:#fff}
+button{padding:15px 25px;font-size:18px;border-radius:10px;border:none;background:#ff4757;color:#fff}
+.dice{font-size:40px;margin-top:20px}
+</style>
+</head>
+<body>
+
+<h1>🎲 주사위 예측기</h1>
+<button onclick="predict()">예측하기</button>
+<div id="trend"></div>
+<div class="dice" id="result"></div>
+
+<script>
+let history=[[2,5,3],[6,1,4],[3,3,3]];
+
+function predict(){
+  let last=history[history.length-1];
+  let sum=last.reduce((a,b)=>a+b,0);
+
+  let trend=sum>=11?"LOW 예상":"HIGH 예상";
+  document.getElementById("trend").innerText=trend;
+
+  let next=[rand(),rand(),rand()];
+  document.getElementById("result").innerText="🎲 "+next.join(" ");
+
+  history.push(next);
+}
+
+function rand(){
+  return Math.floor(Math.random()*6)+1;
+}
+</script>
+
+</body>
+</html>
