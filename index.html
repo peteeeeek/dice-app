@@ -10,11 +10,15 @@ input{padding:8px;margin:3px;width:50px}
 button{padding:6px 10px;margin:3px;border:none;border-radius:6px;background:#ff4757;color:#fff;cursor:pointer}
 .log{max-height:200px;overflow:auto;border:1px solid #333;margin-top:10px;padding:10px}
 .item{margin:4px 0}
+.box{margin-top:15px;padding:10px;border:1px solid #333}
+.good{color:#2ed573}
+.bad{color:#ff4757}
+.warn{color:#ffa502}
 </style>
 </head>
 <body>
 
-<h1>🎲 주사위 분석 시스템</h1>
+<h1>🎲 주사위 AI 분석 시스템</h1>
 
 <div>
 <input id="d1"><input id="d2"><input id="d3">
@@ -25,7 +29,10 @@ button{padding:6px 10px;margin:3px;border:none;border-radius:6px;background:#ff4
 
 <div class="log" id="log"></div>
 
-<div id="output"></div>
+<div id="output" class="box"></div>
+<div id="aiExplain" class="box"></div>
+<div id="warning" class="box"></div>
+<div id="pattern" class="box"></div>
 
 <h3>결과 입력</h3>
 <input id="r1"><input id="r2"><input id="r3">
@@ -42,19 +49,21 @@ let lastPrediction = null;
 let editIndex = null;
 let chart;
 
+// 저장
 function saveLocal(){
   localStorage.setItem("history", JSON.stringify(history));
   localStorage.setItem("stats", JSON.stringify(stats));
 }
 
+// 데이터 입력
 function saveData(){
   let d=[+d1.value,+d2.value,+d3.value];
   if(d.includes(NaN)) return alert("입력");
 
-  if(editIndex !== null){
-    history[editIndex] = d;
-    editIndex = null;
-    saveBtn.innerText = "데이터 추가";
+  if(editIndex!==null){
+    history[editIndex]=d;
+    editIndex=null;
+    saveBtn.innerText="데이터 추가";
   }else{
     history.push(d);
   }
@@ -64,10 +73,11 @@ function saveData(){
   renderLog();
 }
 
+// 로그
 function renderLog(){
   log.innerHTML = history.map((d,i)=>`
     <div class="item">
-      ${i+1}. 🎲 ${d.join(",")} (합:${d[0]+d[1]+d[2]})
+      ${i+1}. 🎲 ${d.join(",")}
       <button onclick="editData(${i})">수정</button>
       <button onclick="deleteData(${i})">삭제</button>
     </div>
@@ -75,29 +85,26 @@ function renderLog(){
 }
 
 function editData(i){
-  let d = history[i];
+  let d=history[i];
   d1.value=d[0]; d2.value=d[1]; d3.value=d[2];
-  editIndex = i;
-  saveBtn.innerText = "수정 완료";
+  editIndex=i;
+  saveBtn.innerText="수정 완료";
 }
 
 function deleteData(i){
-  if(confirm("삭제할까요?")){
+  if(confirm("삭제?")){
     history.splice(i,1);
     saveLocal();
     renderLog();
   }
 }
 
-function getRecent(){
-  return history.slice(-20);
-}
-
+// 예측
 function predict(){
-  let data = getRecent();
+  let data = history.slice(-20);
   if(data.length<5) return alert("데이터 부족");
 
-  let sums = data.map(x=>x[0]+x[1]+x[2]);
+  let sums=data.map(x=>x[0]+x[1]+x[2]);
 
   let high=sums.filter(x=>x>=11).length;
   let low=sums.length-high;
@@ -105,65 +112,94 @@ function predict(){
   let even=sums.filter(x=>x%2===0).length;
   let odd=sums.length-even;
 
-  let total = sums.length;
+  let total=sums.length;
 
   let pHigh=(high/total*100).toFixed(1);
-  let pLow=(low/total*100).toFixed(1);
   let pEven=(even/total*100).toFixed(1);
-  let pOdd=(odd/total*100).toFixed(1);
 
   // 숫자 빈도
   let freq=[0,0,0,0,0,0];
   data.forEach(d=>d.forEach(n=>freq[n-1]++));
 
-  // 모든 조합 평가
+  // 조합 평가
   let combos=[];
   for(let a=1;a<=6;a++){
     for(let b=1;b<=6;b++){
       for(let c=1;c<=6;c++){
         let sum=a+b+c;
         let score=freq[a-1]+freq[b-1]+freq[c-1];
-
-        score += sum>=11 ? high : low;
-        score += sum%2===0 ? even : odd;
-
+        score+= sum>=11?high:low;
+        score+= sum%2===0?even:odd;
         combos.push({nums:[a,b,c], sum, score});
       }
     }
   }
 
-  combos.sort((x,y)=>y.score-x.score);
+  let totalScore = combos.reduce((s,c)=>s+c.score,0);
+
+  combos = combos.map(c=>({
+    ...c,
+    prob:(c.score/totalScore*100)
+  }));
+
+  combos.sort((a,b)=>b.score-a.score);
+
   let top3=combos.slice(0,3);
 
-  lastPrediction = {
+  lastPrediction={
     hl: high>low?"LOW":"HIGH",
     oe: even>odd?"홀":"짝"
   };
 
+  // 출력
   output.innerHTML=`
-    📊 확률<br>
-    HIGH ${pHigh}% / LOW ${pLow}%<br>
-    짝 ${pEven}% / 홀 ${pOdd}%<br><br>
-
-    🎯 추천 TOP3<br>
-    1️⃣ ${top3[0].nums.join(",")} (합:${top3[0].sum})<br>
-    2️⃣ ${top3[1].nums.join(",")} (합:${top3[1].sum})<br>
-    3️⃣ ${top3[2].nums.join(",")} (합:${top3[2].sum})
+    📊 HIGH ${pHigh}% / 짝 ${pEven}%<br><br>
+    🎯 TOP3<br>
+    1️⃣ ${top3[0].nums.join(",")} (${top3[0].prob.toFixed(2)}%)<br>
+    2️⃣ ${top3[1].nums.join(",")} (${top3[1].prob.toFixed(2)}%)<br>
+    3️⃣ ${top3[2].nums.join(",")} (${top3[2].prob.toFixed(2)}%)
   `;
+
+  // AI 설명
+  aiExplain.innerHTML=`
+    🧠 분석 이유<br>
+    - HIGH 비율 ${pHigh}% → ${lastPrediction.hl} 방향<br>
+    - 짝 비율 ${pEven}% → ${lastPrediction.oe} 방향<br>
+    - 많이 나온 숫자 중심 조합 추천
+  `;
+
+  // 위험 판단
+  let diff=Math.abs(high-low);
+  if(diff<=2){
+    warning.innerHTML=`⚠️ <span class="warn">지금은 베팅 금지 (패턴 없음)</span>`;
+  }else if(pHigh>70 || pEven>70){
+    warning.innerHTML=`⚠️ <span class="warn">과열 구간 (반전 가능성 높음)</span>`;
+  }else{
+    warning.innerHTML=`✅ <span class="good">진입 가능 구간</span>`;
+  }
+
+  // 패턴 탐지
+  let last5 = sums.slice(-5);
+  let same = last5.every(v=>v>=11) || last5.every(v=>v<11);
+
+  if(same){
+    pattern.innerHTML=`🔥 <span class="warn">연속 패턴 감지 (쏠림 상태)</span>`;
+  }else{
+    pattern.innerHTML=`✔️ 정상 흐름`;
+  }
 }
 
+// 검증
 function checkResult(){
-  if(!lastPrediction) return alert("먼저 예측");
-
   let sum=+r1.value+ +r2.value+ +r3.value;
   let hl=sum>=11?"HIGH":"LOW";
   let oe=sum%2===0?"짝":"홀";
 
   stats.total++;
 
-  let isHit = (hl===lastPrediction.hl && oe===lastPrediction.oe);
+  let hit=(hl===lastPrediction.hl && oe===lastPrediction.oe);
 
-  if(isHit){
+  if(hit){
     stats.hit++;
     stats.streak++;
     stats.failStreak=0;
@@ -180,16 +216,8 @@ function checkResult(){
 
 function updateUI(){
   let acc=(stats.hit/stats.total*100).toFixed(1);
+  accuracy.innerHTML=`적중률 ${acc}% / 연승 ${stats.streak}`;
 
-  accuracy.innerHTML=`
-    적중률: ${acc}%<br>
-    연승: ${stats.streak} / 연패: ${stats.failStreak}
-  `;
-
-  drawChart();
-}
-
-function drawChart(){
   if(chart) chart.destroy();
   chart=new Chart(chartEl,{
     type:"line",
