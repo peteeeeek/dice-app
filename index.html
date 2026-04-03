@@ -2,38 +2,102 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>주사위 예측기</title>
+<title>주사위 통계 예측기</title>
 <style>
-body{font-family:-apple-system;text-align:center;padding:40px;background:#111;color:#fff}
-button{padding:15px 25px;font-size:18px;border-radius:10px;border:none;background:#ff4757;color:#fff}
-.dice{font-size:40px;margin-top:20px}
+body{font-family:-apple-system;text-align:center;padding:30px;background:#111;color:#fff}
+input{padding:10px;margin:5px;width:50px;text-align:center}
+button{padding:10px 20px;margin:10px;border:none;border-radius:10px;background:#ff4757;color:#fff}
+select{padding:10px;margin:10px;border-radius:8px}
+.result{margin-top:20px;font-size:20px}
 </style>
 </head>
 <body>
 
-<h1>🎲 주사위 예측기</h1>
-<button onclick="predict()">예측하기</button>
-<div id="trend"></div>
-<div class="dice" id="result"></div>
+<h1>🎲 주사위 통계 예측기</h1>
+
+<div>
+<input id="d1" placeholder="1">
+<input id="d2" placeholder="2">
+<input id="d3" placeholder="3">
+<button onclick="addData()">데이터 추가</button>
+</div>
+
+<select id="range">
+  <option value="10">최근 5~10개</option>
+  <option value="30">최근 10~30개</option>
+  <option value="100">최근 30~100개</option>
+</select>
+
+<button onclick="predict()">통계 기반 예측</button>
+
+<div class="result" id="output"></div>
 
 <script>
-let history=[[2,5,3],[6,1,4],[3,3,3]];
+let history = [];
 
-function predict(){
-  let last=history[history.length-1];
-  let sum=last.reduce((a,b)=>a+b,0);
+function addData(){
+  let d1 = parseInt(document.getElementById("d1").value);
+  let d2 = parseInt(document.getElementById("d2").value);
+  let d3 = parseInt(document.getElementById("d3").value);
 
-  let trend=sum>=11?"LOW 예상":"HIGH 예상";
-  document.getElementById("trend").innerText=trend;
+  if(!d1 || !d2 || !d3) return alert("값 입력");
 
-  let next=[rand(),rand(),rand()];
-  document.getElementById("result").innerText="🎲 "+next.join(" ");
-
-  history.push(next);
+  history.push([d1,d2,d3]);
 }
 
-function rand(){
-  return Math.floor(Math.random()*6)+1;
+function getRecent(){
+  let range = parseInt(document.getElementById("range").value);
+  return history.slice(-range);
+}
+
+function predict(){
+  let data = getRecent();
+  if(data.length < 3) return alert("데이터 부족");
+
+  let sums = data.map(x => x[0]+x[1]+x[2]);
+
+  // HIGH / LOW
+  let high = sums.filter(x=>x>=11).length;
+  let low = sums.length - high;
+  let highLow = high > low ? "LOW" : "HIGH";
+
+  // 홀짝
+  let even = sums.filter(x=>x%2===0).length;
+  let odd = sums.length - even;
+  let oddEven = even > odd ? "홀" : "짝";
+
+  // 숫자 빈도 계산
+  let freq = [0,0,0,0,0,0];
+  data.forEach(d=>{
+    d.forEach(n=>{
+      freq[n-1]++;
+    });
+  });
+
+  // 가중치 랜덤
+  function weightedRandom(){
+    let total = freq.reduce((a,b)=>a+b,0);
+    let r = Math.random() * total;
+    let sum = 0;
+    for(let i=0;i<6;i++){
+      sum += freq[i];
+      if(r < sum) return i+1;
+    }
+    return Math.floor(Math.random()*6)+1;
+  }
+
+  let d1 = weightedRandom();
+  let d2 = weightedRandom();
+  let d3 = weightedRandom();
+
+  let sum = d1 + d2 + d3;
+
+  document.getElementById("output").innerHTML = `
+    🔹 HIGH/LOW: ${highLow}<br>
+    🔹 예상 숫자: 🎲 ${d1}, ${d2}, ${d3}<br>
+    🔹 예상 합: ${sum}<br>
+    🔹 홀/짝: ${sum % 2 === 0 ? "짝" : "홀"}
+  `;
 }
 </script>
 
