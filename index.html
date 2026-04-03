@@ -10,7 +10,6 @@ input{padding:8px;margin:3px;width:50px}
 button{padding:6px 10px;margin:3px;border:none;border-radius:6px;background:#ff4757;color:#fff;cursor:pointer}
 .log{max-height:200px;overflow:auto;border:1px solid #333;margin-top:10px;padding:10px}
 .item{margin:4px 0}
-.small{font-size:12px}
 </style>
 </head>
 <body>
@@ -41,6 +40,7 @@ let history = JSON.parse(localStorage.getItem("history")) || [];
 let stats = JSON.parse(localStorage.getItem("stats")) || {total:0, hit:0, streak:0, failStreak:0, log:[]};
 let lastPrediction = null;
 let editIndex = null;
+let chart;
 
 function saveLocal(){
   localStorage.setItem("history", JSON.stringify(history));
@@ -59,21 +59,17 @@ function saveData(){
     history.push(d);
   }
 
-  clearInput();
+  d1.value=""; d2.value=""; d3.value="";
   saveLocal();
   renderLog();
-}
-
-function clearInput(){
-  d1.value=""; d2.value=""; d3.value="";
 }
 
 function renderLog(){
   log.innerHTML = history.map((d,i)=>`
     <div class="item">
       ${i+1}. 🎲 ${d.join(",")} (합:${d[0]+d[1]+d[2]})
-      <button class="small" onclick="editData(${i})">수정</button>
-      <button class="small" onclick="deleteData(${i})">삭제</button>
+      <button onclick="editData(${i})">수정</button>
+      <button onclick="deleteData(${i})">삭제</button>
     </div>
   `).reverse().join("");
 }
@@ -93,12 +89,15 @@ function deleteData(i){
   }
 }
 
-function rand(){return Math.floor(Math.random()*6)+1;}
+function getRecent(){
+  return history.slice(-20);
+}
 
 function predict(){
-  if(history.length<3) return alert("데이터 부족");
+  let data = getRecent();
+  if(data.length<5) return alert("데이터 부족");
 
-  let sums = history.slice(-20).map(x=>x[0]+x[1]+x[2]);
+  let sums = data.map(x=>x[0]+x[1]+x[2]);
 
   let high=sums.filter(x=>x>=11).length;
   let low=sums.length-high;
@@ -106,12 +105,51 @@ function predict(){
   let even=sums.filter(x=>x%2===0).length;
   let odd=sums.length-even;
 
-  let targetHL = high>low?"LOW":"HIGH";
-  let targetOE = even>odd?"홀":"짝";
+  let total = sums.length;
 
-  lastPrediction={hl:targetHL,oe:targetOE};
+  let pHigh=(high/total*100).toFixed(1);
+  let pLow=(low/total*100).toFixed(1);
+  let pEven=(even/total*100).toFixed(1);
+  let pOdd=(odd/total*100).toFixed(1);
 
-  output.innerHTML=`예측: ${targetHL} / ${targetOE}`;
+  // 숫자 빈도
+  let freq=[0,0,0,0,0,0];
+  data.forEach(d=>d.forEach(n=>freq[n-1]++));
+
+  // 모든 조합 평가
+  let combos=[];
+  for(let a=1;a<=6;a++){
+    for(let b=1;b<=6;b++){
+      for(let c=1;c<=6;c++){
+        let sum=a+b+c;
+        let score=freq[a-1]+freq[b-1]+freq[c-1];
+
+        score += sum>=11 ? high : low;
+        score += sum%2===0 ? even : odd;
+
+        combos.push({nums:[a,b,c], sum, score});
+      }
+    }
+  }
+
+  combos.sort((x,y)=>y.score-x.score);
+  let top3=combos.slice(0,3);
+
+  lastPrediction = {
+    hl: high>low?"LOW":"HIGH",
+    oe: even>odd?"홀":"짝"
+  };
+
+  output.innerHTML=`
+    📊 확률<br>
+    HIGH ${pHigh}% / LOW ${pLow}%<br>
+    짝 ${pEven}% / 홀 ${pOdd}%<br><br>
+
+    🎯 추천 TOP3<br>
+    1️⃣ ${top3[0].nums.join(",")} (합:${top3[0].sum})<br>
+    2️⃣ ${top3[1].nums.join(",")} (합:${top3[1].sum})<br>
+    3️⃣ ${top3[2].nums.join(",")} (합:${top3[2].sum})
+  `;
 }
 
 function checkResult(){
@@ -141,9 +179,9 @@ function checkResult(){
 }
 
 function updateUI(){
-  let acc = (stats.hit/stats.total*100).toFixed(1);
+  let acc=(stats.hit/stats.total*100).toFixed(1);
 
-  accuracy.innerHTML = `
+  accuracy.innerHTML=`
     적중률: ${acc}%<br>
     연승: ${stats.streak} / 연패: ${stats.failStreak}
   `;
@@ -151,19 +189,18 @@ function updateUI(){
   drawChart();
 }
 
-let chart;
-
 function drawChart(){
   if(chart) chart.destroy();
-
-  chart = new Chart(document.getElementById("chart"),{
+  chart=new Chart(chartEl,{
     type:"line",
     data:{
-      labels: stats.log.map((_,i)=>i+1),
-      datasets:[{data:stats.log, borderWidth:2}]
+      labels:stats.log.map((_,i)=>i+1),
+      datasets:[{data:stats.log}]
     }
   });
 }
+
+const chartEl=document.getElementById("chart");
 
 renderLog();
 updateUI();
