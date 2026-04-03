@@ -2,138 +2,178 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>주사위 AI 분석 시스템</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<title>주사위 AI 엔진</title>
 <style>
 body{font-family:-apple-system;text-align:center;padding:30px;background:#111;color:#fff}
 input{padding:8px;margin:3px;width:50px}
-button{padding:6px 10px;margin:3px;border:none;border-radius:6px;background:#ff4757;color:#fff;cursor:pointer}
-.log{max-height:200px;overflow:auto;border:1px solid #333;margin-top:10px;padding:10px}
-.item{margin:4px 0}
+button{padding:6px 10px;margin:3px;border:none;border-radius:6px;background:#ff4757;color:#fff}
 .box{margin-top:15px;padding:10px;border:1px solid #333}
 </style>
 </head>
 <body>
 
-<h1>🎲 주사위 AI 분석 시스템</h1>
+<h1>🎲 주사위 AI 엔진</h1>
 
-<div>
 <input id="d1"><input id="d2"><input id="d3">
-<button onclick="saveData()">데이터 추가</button>
-</div>
+<button onclick="add()">데이터 추가</button>
 
-<div>
-<button onclick="predictStat()">📊 통계 기반</button>
-<button onclick="predictPattern()">🧠 패턴 기반</button>
-</div>
-
-<div class="log" id="log"></div>
+<button onclick="predict()">AI 예측</button>
 
 <div id="output" class="box"></div>
 
 <script>
 let history = JSON.parse(localStorage.getItem("history")) || [];
 
-// 저장
-function saveLocal(){
-  localStorage.setItem("history", JSON.stringify(history));
-}
+function save(){localStorage.setItem("history", JSON.stringify(history));}
 
-// 데이터 입력
-function saveData(){
+function add(){
   let d=[+d1.value,+d2.value,+d3.value];
   if(d.includes(NaN)) return alert("입력");
-
   history.push(d);
-  saveLocal();
-  renderLog();
+  save();
 }
 
-// 로그
-function renderLog(){
-  log.innerHTML = history.map((d,i)=>`
-    <div class="item">${i+1}. 🎲 ${d.join(",")}</div>
-  `).reverse().join("");
-}
+// ----------------------
+// 핵심 AI 예측
+// ----------------------
+function predict(){
 
-// ---------------------
-// 📊 통계 기반 (기존)
-// ---------------------
-function predictStat(){
-  let data = history.slice(-20);
-  if(data.length<5) return alert("데이터 부족");
+  if(history.length<5) return alert("데이터 부족");
 
-  let sums=data.map(x=>x[0]+x[1]+x[2]);
+  let current = history[history.length-1];
 
-  let high=sums.filter(x=>x>=11).length;
-  let low=sums.length-high;
+  // 1️⃣ 전이 데이터
+  let transitions={};
 
-  let even=sums.filter(x=>x%2===0).length;
-  let odd=sums.length-even;
+  for(let i=0;i<history.length-1;i++){
+    let key=history[i].join(",");
+    let next=history[i+1].join(",");
 
-  let total=sums.length;
-
-  output.innerHTML=`
-    📊 통계 기반 결과<br>
-    HIGH ${(high/total*100).toFixed(1)}%<br>
-    짝 ${(even/total*100).toFixed(1)}%
-  `;
-}
-
-// ---------------------
-// 🧠 패턴 기반 (핵심)
-// ---------------------
-function predictPattern(){
-  if(history.length < 5) return alert("데이터 부족");
-
-  let transitions = {};
-
-  for(let i=0; i<history.length-1; i++){
-    let key = history[i].join(",");
-    let next = history[i+1].join(",");
-
-    if(!transitions[key]) transitions[key] = {};
-    if(!transitions[key][next]) transitions[key][next] = 0;
+    if(!transitions[key]) transitions[key]={};
+    if(!transitions[key][next]) transitions[key][next]=0;
 
     transitions[key][next]++;
   }
 
-  let current = history[history.length-1].join(",");
+  let currentKey=current.join(",");
+  let exact=transitions[currentKey];
 
-  let nextData = transitions[current];
+  let results=[];
 
-  if(!nextData){
-    output.innerHTML = "❌ 해당 패턴 데이터 없음";
-    return;
+  // ----------------------
+  // 1. 완전 패턴
+  // ----------------------
+  if(exact){
+    let total=Object.values(exact).reduce((a,b)=>a+b,0);
+
+    for(let k in exact){
+      results.push({
+        nums:k,
+        prob:(exact[k]/total*100),
+        type:"패턴"
+      });
+    }
   }
 
-  let total = Object.values(nextData).reduce((a,b)=>a+b,0);
+  // ----------------------
+  // 2. 유사 패턴 (합 기준)
+  // ----------------------
+  let currentSum=current[0]+current[1]+current[2];
 
-  let result = Object.entries(nextData).map(([k,v])=>{
+  let similarData = history
+    .map((h,i)=>({h,i}))
+    .filter(x=>x.i < history.length-1)
+    .filter(x=>Math.abs((x.h[0]+x.h[1]+x.h[2]) - currentSum) <=1);
+
+  if(similarData.length>0){
+    let simCounts={};
+
+    similarData.forEach(x=>{
+      let next=history[x.i+1].join(",");
+      simCounts[next]=(simCounts[next]||0)+1;
+    });
+
+    let total=Object.values(simCounts).reduce((a,b)=>a+b,0);
+
+    for(let k in simCounts){
+      results.push({
+        nums:k,
+        prob:(simCounts[k]/total*100),
+        type:"유사패턴"
+      });
+    }
+  }
+
+  // ----------------------
+  // 3. 통계 fallback
+  // ----------------------
+  let data = history.slice(-20);
+  let freq=[0,0,0,0,0,0];
+  data.forEach(d=>d.forEach(n=>freq[n-1]++));
+
+  for(let a=1;a<=6;a++){
+    for(let b=1;b<=6;b++){
+      for(let c=1;c<=6;c++){
+        let score=freq[a-1]+freq[b-1]+freq[c-1];
+        results.push({
+          nums:[a,b,c].join(","),
+          prob:score,
+          type:"통계"
+        });
+      }
+    }
+  }
+
+  // ----------------------
+  // 4. AI 점수 통합
+  // ----------------------
+  results = results.map(r=>{
+    let weight = 0;
+
+    if(r.type==="패턴") weight=3;
+    else if(r.type==="유사패턴") weight=2;
+    else weight=1;
+
     return {
-      nums: k,
-      prob: (v/total*100)
+      ...r,
+      finalScore: r.prob * weight
     };
   });
 
-  result.sort((a,b)=>b.prob-a.prob);
+  // 합치기
+  let merged={};
 
-  let top = result.slice(0,3);
+  results.forEach(r=>{
+    if(!merged[r.nums]){
+      merged[r.nums]={score:0};
+    }
+    merged[r.nums].score += r.finalScore;
+  });
 
+  let final = Object.entries(merged).map(([k,v])=>{
+    return {nums:k, score:v.score};
+  });
+
+  final.sort((a,b)=>b.score-a.score);
+
+  let top = final.slice(0,3);
+
+  // ----------------------
+  // 출력
+  // ----------------------
   output.innerHTML = `
-    🧠 패턴 기반 예측<br>
-    현재: ${current}<br><br>
+    🎯 AI 통합 추천<br><br>
+    현재: ${current.join(",")}<br><br>
 
-    1️⃣ ${top[0]?.nums || "-"} (${top[0]?.prob.toFixed(1) || 0}%)<br>
-    2️⃣ ${top[1]?.nums || "-"} (${top[1]?.prob.toFixed(1) || 0}%)<br>
-    3️⃣ ${top[2]?.nums || "-"} (${top[2]?.prob.toFixed(1) || 0}%)
+    1️⃣ ${top[0].nums}<br>
+    2️⃣ ${top[1].nums}<br>
+    3️⃣ ${top[2].nums}<br><br>
+
+    📊 기반:
+    패턴 > 유사패턴 > 통계 fallback
   `;
 }
 
-const log = document.getElementById("log");
-const output = document.getElementById("output");
-
-renderLog();
 </script>
 
 </body>
