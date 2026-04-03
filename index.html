@@ -7,9 +7,10 @@
 <style>
 body{font-family:-apple-system;text-align:center;padding:30px;background:#111;color:#fff}
 input{padding:8px;margin:3px;width:50px}
-button{padding:8px 12px;margin:5px;border:none;border-radius:8px;background:#ff4757;color:#fff}
-.log{max-height:150px;overflow:auto;border:1px solid #333;margin-top:10px}
-.result{margin-top:20px}
+button{padding:6px 10px;margin:3px;border:none;border-radius:6px;background:#ff4757;color:#fff;cursor:pointer}
+.log{max-height:200px;overflow:auto;border:1px solid #333;margin-top:10px;padding:10px}
+.item{margin:4px 0}
+.small{font-size:12px}
 </style>
 </head>
 <body>
@@ -18,14 +19,14 @@ button{padding:8px 12px;margin:5px;border:none;border-radius:8px;background:#ff4
 
 <div>
 <input id="d1"><input id="d2"><input id="d3">
-<button onclick="saveData()">데이터 추가</button>
+<button onclick="saveData()" id="saveBtn">데이터 추가</button>
 </div>
 
 <button onclick="predict()">예측</button>
 
 <div class="log" id="log"></div>
 
-<div class="result" id="output"></div>
+<div id="output"></div>
 
 <h3>결과 입력</h3>
 <input id="r1"><input id="r2"><input id="r3">
@@ -39,6 +40,7 @@ button{padding:8px 12px;margin:5px;border:none;border-radius:8px;background:#ff4
 let history = JSON.parse(localStorage.getItem("history")) || [];
 let stats = JSON.parse(localStorage.getItem("stats")) || {total:0, hit:0, streak:0, failStreak:0, log:[]};
 let lastPrediction = null;
+let editIndex = null;
 
 function saveLocal(){
   localStorage.setItem("history", JSON.stringify(history));
@@ -48,13 +50,47 @@ function saveLocal(){
 function saveData(){
   let d=[+d1.value,+d2.value,+d3.value];
   if(d.includes(NaN)) return alert("입력");
-  history.push(d);
+
+  if(editIndex !== null){
+    history[editIndex] = d;
+    editIndex = null;
+    saveBtn.innerText = "데이터 추가";
+  }else{
+    history.push(d);
+  }
+
+  clearInput();
   saveLocal();
   renderLog();
 }
 
+function clearInput(){
+  d1.value=""; d2.value=""; d3.value="";
+}
+
 function renderLog(){
-  log.innerHTML = history.map((d,i)=>`${i+1}. ${d.join(",")}`).reverse().join("<br>");
+  log.innerHTML = history.map((d,i)=>`
+    <div class="item">
+      ${i+1}. 🎲 ${d.join(",")} (합:${d[0]+d[1]+d[2]})
+      <button class="small" onclick="editData(${i})">수정</button>
+      <button class="small" onclick="deleteData(${i})">삭제</button>
+    </div>
+  `).reverse().join("");
+}
+
+function editData(i){
+  let d = history[i];
+  d1.value=d[0]; d2.value=d[1]; d3.value=d[2];
+  editIndex = i;
+  saveBtn.innerText = "수정 완료";
+}
+
+function deleteData(i){
+  if(confirm("삭제할까요?")){
+    history.splice(i,1);
+    saveLocal();
+    renderLog();
+  }
 }
 
 function rand(){return Math.floor(Math.random()*6)+1;}
@@ -79,15 +115,17 @@ function predict(){
 }
 
 function checkResult(){
+  if(!lastPrediction) return alert("먼저 예측");
+
   let sum=+r1.value+ +r2.value+ +r3.value;
   let hl=sum>=11?"HIGH":"LOW";
   let oe=sum%2===0?"짝":"홀";
 
   stats.total++;
 
-  let hit = (hl===lastPrediction.hl && oe===lastPrediction.oe);
+  let isHit = (hl===lastPrediction.hl && oe===lastPrediction.oe);
 
-  if(hit){
+  if(isHit){
     stats.hit++;
     stats.streak++;
     stats.failStreak=0;
@@ -113,12 +151,16 @@ function updateUI(){
   drawChart();
 }
 
+let chart;
+
 function drawChart(){
-  new Chart(document.getElementById("chart"),{
+  if(chart) chart.destroy();
+
+  chart = new Chart(document.getElementById("chart"),{
     type:"line",
     data:{
       labels: stats.log.map((_,i)=>i+1),
-      datasets:[{data:stats.log}]
+      datasets:[{data:stats.log, borderWidth:2}]
     }
   });
 }
