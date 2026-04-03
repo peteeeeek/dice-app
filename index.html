@@ -6,35 +6,122 @@
 <style>
 body{font-family:-apple-system;text-align:center;padding:30px;background:#111;color:#fff}
 input{padding:8px;margin:3px;width:50px}
-button{padding:6px 10px;margin:3px;border:none;border-radius:6px;background:#ff4757;color:#fff}
+button{padding:6px 10px;margin:3px;border:none;border-radius:6px;background:#ff4757;color:#fff;cursor:pointer}
 .box{margin-top:15px;padding:10px;border:1px solid #333}
+.item{margin:5px 0}
+.good{color:#2ed573}
+.warn{color:#ffa502}
+.bad{color:#ff4757}
 </style>
 </head>
 <body>
 
-<h1>🎲 주사위 AI 엔진</h1>
+<h1>🎲 주사위 AI 엔진 (완전체)</h1>
 
-<input id="d1"><input id="d2"><input id="d3">
-<button onclick="add()">데이터 추가</button>
+<div>
+<input id="d1" placeholder="1">
+<input id="d2" placeholder="2">
+<input id="d3" placeholder="3">
+<button onclick="add()" id="addBtn">데이터 추가</button>
+</div>
 
+<label>
+  <input type="checkbox" id="betToggle" checked>
+  자동 베팅 추천
+</label>
+
+<br>
 <button onclick="predict()">AI 예측</button>
+
+<h3>📊 데이터 로그</h3>
+<div id="log" class="box"></div>
 
 <div id="output" class="box"></div>
 
 <script>
 let history = JSON.parse(localStorage.getItem("history")) || [];
+let editIndex = null;
 
-function save(){localStorage.setItem("history", JSON.stringify(history));}
-
-function add(){
-  let d=[+d1.value,+d2.value,+d3.value];
-  if(d.includes(NaN)) return alert("입력");
-  history.push(d);
-  save();
+function save(){
+  localStorage.setItem("history", JSON.stringify(history));
 }
 
 // ----------------------
-// 핵심 AI 예측
+// 데이터 추가 / 수정
+// ----------------------
+function add(){
+  let d1El=document.getElementById("d1");
+  let d2El=document.getElementById("d2");
+  let d3El=document.getElementById("d3");
+
+  let d=[+d1El.value,+d2El.value,+d3El.value];
+
+  if(d.includes(NaN)) return alert("값 입력");
+
+  if(editIndex !== null){
+    history[editIndex] = d;
+    editIndex = null;
+    document.getElementById("addBtn").innerText = "데이터 추가";
+  }else{
+    history.push(d);
+  }
+
+  save();
+
+  d1El.value=""; d2El.value=""; d3El.value="";
+  renderLog();
+}
+
+// ----------------------
+// 로그 출력
+// ----------------------
+function renderLog(){
+  let logEl = document.getElementById("log");
+
+  if(history.length === 0){
+    logEl.innerHTML = "데이터 없음";
+    return;
+  }
+
+  logEl.innerHTML = history
+    .map((d,i)=>`
+      <div class="item">
+        ${i+1}. 🎲 ${d.join(",")} (합:${d[0]+d[1]+d[2]})
+        <button onclick="editData(${i})">수정</button>
+        <button onclick="deleteData(${i})">삭제</button>
+      </div>
+    `)
+    .reverse()
+    .join("");
+}
+
+// ----------------------
+// 수정
+// ----------------------
+function editData(i){
+  let d = history[i];
+
+  document.getElementById("d1").value = d[0];
+  document.getElementById("d2").value = d[1];
+  document.getElementById("d3").value = d[2];
+
+  editIndex = i;
+  document.getElementById("addBtn").innerText = "수정 완료";
+}
+
+// ----------------------
+// 삭제
+// ----------------------
+function deleteData(i){
+  if(confirm("삭제할까요?")){
+    history.splice(i,1);
+    save();
+    renderLog();
+  }
+}
+
+// ----------------------
+// AI 예측 엔진
 // ----------------------
 function predict(){
 
@@ -42,7 +129,6 @@ function predict(){
 
   let current = history[history.length-1];
 
-  // 1️⃣ 전이 데이터
   let transitions={};
 
   for(let i=0;i<history.length-1;i++){
@@ -59,12 +145,12 @@ function predict(){
   let exact=transitions[currentKey];
 
   let results=[];
+  let patternCount=0;
 
-  // ----------------------
-  // 1. 완전 패턴
-  // ----------------------
+  // 1️⃣ 패턴
   if(exact){
     let total=Object.values(exact).reduce((a,b)=>a+b,0);
+    patternCount=total;
 
     for(let k in exact){
       results.push({
@@ -75,20 +161,18 @@ function predict(){
     }
   }
 
-  // ----------------------
-  // 2. 유사 패턴 (합 기준)
-  // ----------------------
-  let currentSum=current[0]+current[1]+current[2];
+  // 2️⃣ 유사 패턴
+  let currentSum=current.reduce((a,b)=>a+b,0);
 
-  let similarData = history
+  let similar = history
     .map((h,i)=>({h,i}))
     .filter(x=>x.i < history.length-1)
-    .filter(x=>Math.abs((x.h[0]+x.h[1]+x.h[2]) - currentSum) <=1);
+    .filter(x=>Math.abs(x.h.reduce((a,b)=>a+b,0)-currentSum)<=1);
 
-  if(similarData.length>0){
+  if(similar.length>0){
     let simCounts={};
 
-    similarData.forEach(x=>{
+    similar.forEach(x=>{
       let next=history[x.i+1].join(",");
       simCounts[next]=(simCounts[next]||0)+1;
     });
@@ -104,17 +188,17 @@ function predict(){
     }
   }
 
-  // ----------------------
-  // 3. 통계 fallback
-  // ----------------------
-  let data = history.slice(-20);
+  // 3️⃣ 통계 fallback
+  let data=history.slice(-20);
   let freq=[0,0,0,0,0,0];
+
   data.forEach(d=>d.forEach(n=>freq[n-1]++));
 
   for(let a=1;a<=6;a++){
     for(let b=1;b<=6;b++){
       for(let c=1;c<=6;c++){
         let score=freq[a-1]+freq[b-1]+freq[c-1];
+
         results.push({
           nums:[a,b,c].join(","),
           prob:score,
@@ -124,56 +208,59 @@ function predict(){
     }
   }
 
-  // ----------------------
-  // 4. AI 점수 통합
-  // ----------------------
+  // 4️⃣ AI 점수 통합
   results = results.map(r=>{
-    let weight = 0;
-
-    if(r.type==="패턴") weight=3;
-    else if(r.type==="유사패턴") weight=2;
-    else weight=1;
-
-    return {
-      ...r,
-      finalScore: r.prob * weight
-    };
+    let w = r.type==="패턴"?3 : r.type==="유사패턴"?2 : 1;
+    return {...r, score:r.prob*w};
   });
 
-  // 합치기
   let merged={};
 
   results.forEach(r=>{
-    if(!merged[r.nums]){
-      merged[r.nums]={score:0};
-    }
-    merged[r.nums].score += r.finalScore;
+    if(!merged[r.nums]) merged[r.nums]={score:0};
+    merged[r.nums].score += r.score;
   });
 
-  let final = Object.entries(merged).map(([k,v])=>{
-    return {nums:k, score:v.score};
-  });
-
+  let final = Object.entries(merged).map(([k,v])=>({nums:k,score:v.score}));
   final.sort((a,b)=>b.score-a.score);
 
   let top = final.slice(0,3);
 
   // ----------------------
-  // 출력
+  // 신뢰도
   // ----------------------
-  output.innerHTML = `
-    🎯 AI 통합 추천<br><br>
-    현재: ${current.join(",")}<br><br>
+  let confidence = Math.min((patternCount/10)*100,100).toFixed(1);
 
+  // ----------------------
+  // 진입 판단
+  // ----------------------
+  let decision="";
+  if(patternCount<3){
+    decision="❌ 대기 (데이터 부족)";
+  }else if(confidence<40){
+    decision="⚠️ 약함 → 대기";
+  }else if(confidence<70){
+    decision="👉 중간 → 소액";
+  }else{
+    decision="🔥 강함 → 진입";
+  }
+
+  let betOn=document.getElementById("betToggle").checked;
+
+  output.innerHTML=`
+    🎯 추천 조합<br>
     1️⃣ ${top[0].nums}<br>
     2️⃣ ${top[1].nums}<br>
     3️⃣ ${top[2].nums}<br><br>
 
-    📊 기반:
-    패턴 > 유사패턴 > 통계 fallback
+    📊 신뢰도: ${confidence}% (패턴 ${patternCount}개)<br><br>
+
+    ${betOn ? `<b>${decision}</b>` : "📌 추천 OFF"}
   `;
 }
 
+// 초기 실행
+renderLog();
 </script>
 
 </body>
