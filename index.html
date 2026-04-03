@@ -2,21 +2,21 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>주사위 AI 엔진 (안정화)</title>
+<title>주사위 AI 엔진 (완전체)</title>
 <style>
 body{font-family:-apple-system;text-align:center;padding:20px;background:#111;color:#fff}
 input{padding:8px;margin:3px;width:60px;font-size:16px}
 button{padding:8px 12px;margin:3px;border:none;border-radius:6px;background:#ff4757;color:#fff;font-size:14px}
 .box{margin-top:15px;padding:10px;border:1px solid #333}
 .item{margin:6px 0}
-.warn{color:#ffa502}
 .good{color:#2ed573}
+.warn{color:#ffa502}
 .bad{color:#ff4757}
 </style>
 </head>
 <body>
 
-<h2>🎲 주사위 AI 엔진 (안정화)</h2>
+<h2>🎲 주사위 AI 엔진 (최종)</h2>
 
 <div>
 <input id="d1" placeholder="1">
@@ -33,6 +33,14 @@ button{padding:8px 12px;margin:3px;border:none;border-radius:6px;background:#ff4
 <br>
 <button id="predictBtn">AI 예측</button>
 
+<!-- 🔥 데이터 관리 버튼 -->
+<div style="margin-top:10px;">
+  <button onclick="resetData()">🗑 초기화</button>
+  <button onclick="backupData()">💾 백업</button>
+  <input type="file" id="restoreFile" style="display:none" onchange="restoreData(event)">
+  <button onclick="document.getElementById('restoreFile').click()">📂 복구</button>
+</div>
+
 <h3>📊 데이터 로그</h3>
 <div id="log" class="box"></div>
 
@@ -41,14 +49,11 @@ button{padding:8px 12px;margin:3px;border:none;border-radius:6px;background:#ff4
 <script>
 (function(){
 
-// ----------------------
-// 안전한 데이터 로드
-// ----------------------
 function loadHistory(){
   try{
     let data = JSON.parse(localStorage.getItem("history"));
     return Array.isArray(data) ? data : [];
-  }catch(e){
+  }catch{
     return [];
   }
 }
@@ -56,16 +61,11 @@ function loadHistory(){
 let history = loadHistory();
 let editIndex = null;
 
-// ----------------------
-// 저장
-// ----------------------
 function save(){
   localStorage.setItem("history", JSON.stringify(history));
 }
 
-// ----------------------
-// 입력값 검증
-// ----------------------
+// 입력 검증
 function getInput(){
   let d1 = Number(document.getElementById("d1").value);
   let d2 = Number(document.getElementById("d2").value);
@@ -81,9 +81,7 @@ function getInput(){
   return arr;
 }
 
-// ----------------------
-// 데이터 추가 / 수정
-// ----------------------
+// 추가/수정
 function add(){
   let d = getInput();
   if(!d) return;
@@ -91,7 +89,7 @@ function add(){
   if(editIndex !== null){
     history[editIndex] = d;
     editIndex = null;
-    document.getElementById("addBtn").innerText = "데이터 추가";
+    document.getElementById("addBtn").innerText="데이터 추가";
   }else{
     history.push(d);
   }
@@ -101,21 +99,18 @@ function add(){
   renderLog();
 }
 
-// ----------------------
 function clearInput(){
   document.getElementById("d1").value="";
   document.getElementById("d2").value="";
   document.getElementById("d3").value="";
 }
 
-// ----------------------
-// 로그 출력
-// ----------------------
+// 로그
 function renderLog(){
   let logEl = document.getElementById("log");
 
   if(history.length === 0){
-    logEl.innerHTML = "데이터 없음";
+    logEl.innerHTML="데이터 없음";
     return;
   }
 
@@ -128,23 +123,17 @@ function renderLog(){
   `).reverse().join("");
 }
 
-// ----------------------
 // 수정
-// ----------------------
 window.editData = function(i){
   let d = history[i];
-
-  document.getElementById("d1").value = d[0];
-  document.getElementById("d2").value = d[1];
-  document.getElementById("d3").value = d[2];
-
-  editIndex = i;
-  document.getElementById("addBtn").innerText = "수정 완료";
+  document.getElementById("d1").value=d[0];
+  document.getElementById("d2").value=d[1];
+  document.getElementById("d3").value=d[2];
+  editIndex=i;
+  document.getElementById("addBtn").innerText="수정 완료";
 }
 
-// ----------------------
 // 삭제
-// ----------------------
 window.deleteData = function(i){
   if(confirm("삭제할까요?")){
     history.splice(i,1);
@@ -153,87 +142,108 @@ window.deleteData = function(i){
   }
 }
 
-// ----------------------
 // 예측
-// ----------------------
 function predict(){
 
   let output = document.getElementById("output");
 
   try{
-
-    if(history.length < 5){
-      output.innerHTML = "⚠️ 데이터 5개 이상 필요";
+    if(history.length<5){
+      output.innerHTML="⚠️ 데이터 5개 이상 필요";
       return;
     }
 
     let current = history[history.length-1];
 
-    // 흐름 확률
     let recent = history.slice(-20);
     let sums = recent.map(x=>x[0]+x[1]+x[2]);
 
     let high = sums.filter(x=>x>=11).length;
     let even = sums.filter(x=>x%2===0).length;
-
     let total = sums.length;
 
-    let pHigh = (high/total*100).toFixed(1);
-    let pLow = (100-pHigh).toFixed(1);
-    let pEven = (even/total*100).toFixed(1);
-    let pOdd = (100-pEven).toFixed(1);
+    let pHigh=(high/total*100).toFixed(1);
+    let pLow=(100-pHigh).toFixed(1);
+    let pEven=(even/total*100).toFixed(1);
+    let pOdd=(100-pEven).toFixed(1);
 
-    // 간단 패턴
-    let nextMap = {};
+    let nextMap={};
     for(let i=0;i<history.length-1;i++){
-      let k = history[i].join(",");
-      let n = history[i+1].join(",");
-      if(k === current.join(",")){
-        nextMap[n] = (nextMap[n]||0)+1;
+      let k=history[i].join(",");
+      let n=history[i+1].join(",");
+      if(k===current.join(",")){
+        nextMap[n]=(nextMap[n]||0)+1;
       }
     }
 
-    let results = Object.entries(nextMap).map(([k,v])=>({
-      nums:k,
-      prob:v
-    }));
-
+    let results = Object.entries(nextMap).map(([k,v])=>({nums:k,prob:v}));
     results.sort((a,b)=>b.prob-a.prob);
 
-    let top = results.slice(0,3);
-
     function analyze(nums){
-      let arr = nums.split(",").map(Number);
-      let sum = arr[0]+arr[1]+arr[2];
-      return `${sum>=11?"HIGH":"LOW"} / ${sum%2===0?"짝":"홀"}`;
+      let arr=nums.split(",").map(Number);
+      let sum=arr[0]+arr[1]+arr[2];
+      return `${sum>=11?"HIGH":"LOW"} / ${sum%2===0?"짝":"홀"} (합:${sum})`;
     }
 
-    let betOn = document.getElementById("betToggle").checked;
+    let betOn=document.getElementById("betToggle").checked;
 
-    output.innerHTML = `
-      📊 흐름<br>
+    output.innerHTML=`
+      📊 흐름 확률<br>
       HIGH ${pHigh}% / LOW ${pLow}%<br>
       짝 ${pEven}% / 홀 ${pOdd}%<br><br>
 
-      🎯 패턴 추천<br>
-      ${top.length ? top.map((t,i)=>`${i+1}. ${t.nums} → ${analyze(t.nums)}`).join("<br>") : "패턴 없음"}<br><br>
+      🎯 추천<br>
+      ${results.length ? results.slice(0,3).map((r,i)=>`${i+1}. ${r.nums} → ${analyze(r.nums)}`).join("<br>") : "패턴 없음"}<br><br>
 
-      ${betOn ? `<b class="${pHigh>60?'good':'warn'}">판단: ${pHigh>60?"HIGH 쏠림":"중립"}</b>` : "추천 OFF"}
+      ${betOn ? `<b class="${pHigh>60?'good':'warn'}">${pHigh>60?"HIGH 쏠림":"중립 흐름"}</b>` : "추천 OFF"}
     `;
 
   }catch(e){
-    output.innerHTML = "❌ 오류 발생 (데이터 초기화 권장)";
+    output.innerHTML="❌ 오류 → 초기화 권장";
     console.error(e);
   }
 }
 
-// ----------------------
-// 이벤트 연결 (안전)
-// ----------------------
+// 데이터 관리
+window.resetData = function(){
+  if(confirm("전체 삭제?")){
+    localStorage.clear();
+    location.reload();
+  }
+}
+
+window.backupData = function(){
+  let data = localStorage.getItem("history") || "[]";
+  let blob = new Blob([data], {type:"application/json"});
+  let url = URL.createObjectURL(blob);
+  let a=document.createElement("a");
+  a.href=url;
+  a.download="dice_backup.json";
+  a.click();
+}
+
+window.restoreData = function(e){
+  let file=e.target.files[0];
+  if(!file) return;
+
+  let reader=new FileReader();
+  reader.onload=function(evt){
+    try{
+      let data=JSON.parse(evt.target.result);
+      localStorage.setItem("history", JSON.stringify(data));
+      alert("복구 완료");
+      location.reload();
+    }catch{
+      alert("파일 오류");
+    }
+  };
+  reader.readAsText(file);
+}
+
+// 이벤트
 document.getElementById("addBtn").addEventListener("click", add);
 document.getElementById("predictBtn").addEventListener("click", predict);
 
-// 초기 실행
 renderLog();
 
 })();
