@@ -6,24 +6,17 @@
 <style>
 body{font-family:-apple-system;text-align:center;padding:30px;background:#111;color:#fff}
 input{padding:8px;margin:3px;width:50px}
-button{padding:6px 10px;margin:3px;border:none;border-radius:6px;background:#ff4757;color:#fff;cursor:pointer}
+button{padding:6px 10px;margin:3px;border:none;border-radius:6px;background:#ff4757;color:#fff}
 .box{margin-top:15px;padding:10px;border:1px solid #333}
 .item{margin:5px 0}
-.good{color:#2ed573}
-.warn{color:#ffa502}
-.bad{color:#ff4757}
 </style>
 </head>
 <body>
 
-<h1>🎲 주사위 AI 엔진 (완전체)</h1>
+<h1>🎲 주사위 AI 엔진</h1>
 
-<div>
-<input id="d1" placeholder="1">
-<input id="d2" placeholder="2">
-<input id="d3" placeholder="3">
+<input id="d1"><input id="d2"><input id="d3">
 <button onclick="add()" id="addBtn">데이터 추가</button>
-</div>
 
 <label>
   <input type="checkbox" id="betToggle" checked>
@@ -46,74 +39,44 @@ function save(){
   localStorage.setItem("history", JSON.stringify(history));
 }
 
-// ----------------------
-// 데이터 추가 / 수정
-// ----------------------
+// 데이터 추가
 function add(){
-  let d1El=document.getElementById("d1");
-  let d2El=document.getElementById("d2");
-  let d3El=document.getElementById("d3");
+  let d=[+d1.value,+d2.value,+d3.value];
+  if(d.includes(NaN)) return alert("입력");
 
-  let d=[+d1El.value,+d2El.value,+d3El.value];
-
-  if(d.includes(NaN)) return alert("값 입력");
-
-  if(editIndex !== null){
-    history[editIndex] = d;
-    editIndex = null;
-    document.getElementById("addBtn").innerText = "데이터 추가";
+  if(editIndex!==null){
+    history[editIndex]=d;
+    editIndex=null;
+    addBtn.innerText="데이터 추가";
   }else{
     history.push(d);
   }
 
   save();
-
-  d1El.value=""; d2El.value=""; d3El.value="";
+  d1.value=""; d2.value=""; d3.value="";
   renderLog();
 }
 
-// ----------------------
-// 로그 출력
-// ----------------------
+// 로그
 function renderLog(){
-  let logEl = document.getElementById("log");
-
-  if(history.length === 0){
-    logEl.innerHTML = "데이터 없음";
-    return;
-  }
-
-  logEl.innerHTML = history
-    .map((d,i)=>`
-      <div class="item">
-        ${i+1}. 🎲 ${d.join(",")} (합:${d[0]+d[1]+d[2]})
-        <button onclick="editData(${i})">수정</button>
-        <button onclick="deleteData(${i})">삭제</button>
-      </div>
-    `)
-    .reverse()
-    .join("");
+  log.innerHTML = history.map((d,i)=>`
+    <div class="item">
+      ${i+1}. 🎲 ${d.join(",")} (합:${d[0]+d[1]+d[2]})
+      <button onclick="editData(${i})">수정</button>
+      <button onclick="deleteData(${i})">삭제</button>
+    </div>
+  `).reverse().join("");
 }
 
-// ----------------------
-// 수정
-// ----------------------
 function editData(i){
-  let d = history[i];
-
-  document.getElementById("d1").value = d[0];
-  document.getElementById("d2").value = d[1];
-  document.getElementById("d3").value = d[2];
-
-  editIndex = i;
-  document.getElementById("addBtn").innerText = "수정 완료";
+  let d=history[i];
+  d1.value=d[0]; d2.value=d[1]; d3.value=d[2];
+  editIndex=i;
+  addBtn.innerText="수정 완료";
 }
 
-// ----------------------
-// 삭제
-// ----------------------
 function deleteData(i){
-  if(confirm("삭제할까요?")){
+  if(confirm("삭제?")){
     history.splice(i,1);
     save();
     renderLog();
@@ -121,7 +84,7 @@ function deleteData(i){
 }
 
 // ----------------------
-// AI 예측 엔진
+// 예측
 // ----------------------
 function predict(){
 
@@ -129,8 +92,25 @@ function predict(){
 
   let current = history[history.length-1];
 
-  let transitions={};
+  // 🔥 HIGH/LOW + 홀짝 확률 계산
+  let recent = history.slice(-20);
+  let sums = recent.map(x=>x[0]+x[1]+x[2]);
 
+  let high = sums.filter(x=>x>=11).length;
+  let low = sums.length - high;
+
+  let even = sums.filter(x=>x%2===0).length;
+  let odd = sums.length - even;
+
+  let total = sums.length;
+
+  let pHigh=(high/total*100).toFixed(1);
+  let pLow=(low/total*100).toFixed(1);
+  let pEven=(even/total*100).toFixed(1);
+  let pOdd=(odd/total*100).toFixed(1);
+
+  // 패턴
+  let transitions={};
   for(let i=0;i<history.length-1;i++){
     let key=history[i].join(",");
     let next=history[i+1].join(",");
@@ -147,78 +127,38 @@ function predict(){
   let results=[];
   let patternCount=0;
 
-  // 1️⃣ 패턴
   if(exact){
     let total=Object.values(exact).reduce((a,b)=>a+b,0);
     patternCount=total;
 
     for(let k in exact){
-      results.push({
-        nums:k,
-        prob:(exact[k]/total*100),
-        type:"패턴"
-      });
+      results.push({nums:k,prob:(exact[k]/total*100),type:"패턴"});
     }
   }
 
-  // 2️⃣ 유사 패턴
-  let currentSum=current.reduce((a,b)=>a+b,0);
-
-  let similar = history
-    .map((h,i)=>({h,i}))
-    .filter(x=>x.i < history.length-1)
-    .filter(x=>Math.abs(x.h.reduce((a,b)=>a+b,0)-currentSum)<=1);
-
-  if(similar.length>0){
-    let simCounts={};
-
-    similar.forEach(x=>{
-      let next=history[x.i+1].join(",");
-      simCounts[next]=(simCounts[next]||0)+1;
-    });
-
-    let total=Object.values(simCounts).reduce((a,b)=>a+b,0);
-
-    for(let k in simCounts){
-      results.push({
-        nums:k,
-        prob:(simCounts[k]/total*100),
-        type:"유사패턴"
-      });
-    }
-  }
-
-  // 3️⃣ 통계 fallback
-  let data=history.slice(-20);
+  // 통계 fallback
   let freq=[0,0,0,0,0,0];
-
-  data.forEach(d=>d.forEach(n=>freq[n-1]++));
+  recent.forEach(d=>d.forEach(n=>freq[n-1]++));
 
   for(let a=1;a<=6;a++){
     for(let b=1;b<=6;b++){
       for(let c=1;c<=6;c++){
         let score=freq[a-1]+freq[b-1]+freq[c-1];
-
-        results.push({
-          nums:[a,b,c].join(","),
-          prob:score,
-          type:"통계"
-        });
+        results.push({nums:[a,b,c].join(","),prob:score,type:"통계"});
       }
     }
   }
 
-  // 4️⃣ AI 점수 통합
+  // 점수 통합
   results = results.map(r=>{
-    let w = r.type==="패턴"?3 : r.type==="유사패턴"?2 : 1;
-    return {...r, score:r.prob*w};
+    let w = r.type==="패턴"?3:1;
+    return {...r,score:r.prob*w};
   });
 
   let merged={};
-
   results.forEach(r=>{
     if(!merged[r.nums]) merged[r.nums]={score:0};
-    merged[r.nums].score += r.score;
+    merged[r.nums].score+=r.score;
   });
 
   let final = Object.entries(merged).map(([k,v])=>({nums:k,score:v.score}));
@@ -226,40 +166,35 @@ function predict(){
 
   let top = final.slice(0,3);
 
-  // ----------------------
-  // 신뢰도
-  // ----------------------
-  let confidence = Math.min((patternCount/10)*100,100).toFixed(1);
-
-  // ----------------------
-  // 진입 판단
-  // ----------------------
-  let decision="";
-  if(patternCount<3){
-    decision="❌ 대기 (데이터 부족)";
-  }else if(confidence<40){
-    decision="⚠️ 약함 → 대기";
-  }else if(confidence<70){
-    decision="👉 중간 → 소액";
-  }else{
-    decision="🔥 강함 → 진입";
+  // 🔥 조합 해석
+  function analyze(nums){
+    let arr=nums.split(",").map(Number);
+    let sum=arr[0]+arr[1]+arr[2];
+    let hl=sum>=11?"HIGH":"LOW";
+    let oe=sum%2===0?"짝":"홀";
+    return `${hl} / ${oe} (합:${sum})`;
   }
 
-  let betOn=document.getElementById("betToggle").checked;
+  let confidence = Math.min((patternCount/10)*100,100).toFixed(1);
+
+  let decision = confidence<40 ? "⚠️ 대기" : "🔥 진입";
 
   output.innerHTML=`
-    🎯 추천 조합<br>
-    1️⃣ ${top[0].nums}<br>
-    2️⃣ ${top[1].nums}<br>
-    3️⃣ ${top[2].nums}<br><br>
+    📊 흐름 확률<br>
+    HIGH ${pHigh}% / LOW ${pLow}%<br>
+    짝 ${pEven}% / 홀 ${pOdd}%<br><br>
 
-    📊 신뢰도: ${confidence}% (패턴 ${patternCount}개)<br><br>
+    🎯 추천 TOP3<br>
+    1️⃣ ${top[0].nums} → ${analyze(top[0].nums)}<br>
+    2️⃣ ${top[1].nums} → ${analyze(top[1].nums)}<br>
+    3️⃣ ${top[2].nums} → ${analyze(top[2].nums)}<br><br>
 
-    ${betOn ? `<b>${decision}</b>` : "📌 추천 OFF"}
+    📈 신뢰도 ${confidence}%<br>
+    ${document.getElementById("betToggle").checked ? decision : "추천 OFF"}
   `;
 }
 
-// 초기 실행
+// 초기
 renderLog();
 </script>
 
