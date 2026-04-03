@@ -6,9 +6,12 @@
 <style>
 body{font-family:-apple-system;text-align:center;padding:30px;background:#111;color:#fff}
 input{padding:10px;margin:5px;width:50px;text-align:center}
-button{padding:10px 20px;margin:10px;border:none;border-radius:10px;background:#ff4757;color:#fff}
+button{padding:8px 12px;margin:5px;border:none;border-radius:8px;background:#ff4757;color:#fff;cursor:pointer}
 select{padding:10px;margin:10px;border-radius:8px}
-.result{margin-top:20px;font-size:20px}
+.log{margin-top:20px; max-height:200px; overflow:auto; border:1px solid #333; padding:10px}
+.item{margin:5px 0}
+.small-btn{font-size:12px;padding:5px 8px;margin-left:5px}
+.result{margin-top:20px;font-size:18px}
 </style>
 </head>
 <body>
@@ -19,7 +22,7 @@ select{padding:10px;margin:10px;border-radius:8px}
 <input id="d1" placeholder="1">
 <input id="d2" placeholder="2">
 <input id="d3" placeholder="3">
-<button onclick="addData()">데이터 추가</button>
+<button onclick="saveData()" id="saveBtn">데이터 추가</button>
 </div>
 
 <select id="range">
@@ -30,43 +33,94 @@ select{padding:10px;margin:10px;border-radius:8px}
 
 <button onclick="predict()">통계 기반 예측</button>
 
+<h3>📊 데이터 로그</h3>
+<div class="log" id="log"></div>
+
 <div class="result" id="output"></div>
 
 <script>
 let history = [];
+let editIndex = null;
 
-function addData(){
+// 추가 or 수정
+function saveData(){
   let d1 = parseInt(document.getElementById("d1").value);
   let d2 = parseInt(document.getElementById("d2").value);
   let d3 = parseInt(document.getElementById("d3").value);
 
   if(!d1 || !d2 || !d3) return alert("값 입력");
 
-  history.push([d1,d2,d3]);
+  if(editIndex !== null){
+    history[editIndex] = [d1,d2,d3];
+    editIndex = null;
+    document.getElementById("saveBtn").innerText = "데이터 추가";
+  } else {
+    history.push([d1,d2,d3]);
+  }
+
+  clearInput();
+  renderLog();
 }
 
+// 입력창 초기화
+function clearInput(){
+  document.getElementById("d1").value = "";
+  document.getElementById("d2").value = "";
+  document.getElementById("d3").value = "";
+}
+
+// 로그 렌더링
+function renderLog(){
+  let log = document.getElementById("log");
+
+  log.innerHTML = history.map((d,i)=>`
+    <div class="item">
+      ${i+1}. 🎲 ${d.join(",")} (합:${d[0]+d[1]+d[2]})
+      <button class="small-btn" onclick="editData(${i})">수정</button>
+      <button class="small-btn" onclick="deleteData(${i})">삭제</button>
+    </div>
+  `).reverse().join("");
+}
+
+// 수정
+function editData(index){
+  let d = history[index];
+
+  document.getElementById("d1").value = d[0];
+  document.getElementById("d2").value = d[1];
+  document.getElementById("d3").value = d[2];
+
+  editIndex = index;
+  document.getElementById("saveBtn").innerText = "수정 완료";
+}
+
+// 삭제
+function deleteData(index){
+  if(confirm("삭제할까요?")){
+    history.splice(index,1);
+    renderLog();
+  }
+}
+
+// 최근 데이터
 function getRecent(){
   let range = parseInt(document.getElementById("range").value);
   return history.slice(-range);
 }
 
+// 예측
 function predict(){
   let data = getRecent();
   if(data.length < 3) return alert("데이터 부족");
 
   let sums = data.map(x => x[0]+x[1]+x[2]);
 
-  // HIGH / LOW
   let high = sums.filter(x=>x>=11).length;
   let low = sums.length - high;
-  let highLow = high > low ? "LOW" : "HIGH";
 
-  // 홀짝
   let even = sums.filter(x=>x%2===0).length;
   let odd = sums.length - even;
-  let oddEven = even > odd ? "홀" : "짝";
 
-  // 숫자 빈도 계산
   let freq = [0,0,0,0,0,0];
   data.forEach(d=>{
     d.forEach(n=>{
@@ -74,10 +128,9 @@ function predict(){
     });
   });
 
-  // 가중치 랜덤
   function weightedRandom(){
     let total = freq.reduce((a,b)=>a+b,0);
-    let r = Math.random() * total;
+    let r = Math.random()*total;
     let sum = 0;
     for(let i=0;i<6;i++){
       sum += freq[i];
@@ -90,13 +143,18 @@ function predict(){
   let d2 = weightedRandom();
   let d3 = weightedRandom();
 
-  let sum = d1 + d2 + d3;
+  let sum = d1+d2+d3;
 
   document.getElementById("output").innerHTML = `
-    🔹 HIGH/LOW: ${highLow}<br>
-    🔹 예상 숫자: 🎲 ${d1}, ${d2}, ${d3}<br>
-    🔹 예상 합: ${sum}<br>
-    🔹 홀/짝: ${sum % 2 === 0 ? "짝" : "홀"}
+    📊 분석 데이터: ${data.length}개<br>
+    👉 HIGH:${high} / LOW:${low}<br>
+    👉 홀:${odd} / 짝:${even}<br><br>
+
+    🔹 예측 결과<br>
+    🎲 ${d1}, ${d2}, ${d3}<br>
+    합: ${sum}<br>
+    HIGH/LOW: ${sum>=11 ? "HIGH" : "LOW"}<br>
+    홀짝: ${sum%2===0 ? "짝" : "홀"}
   `;
 }
 </script>
